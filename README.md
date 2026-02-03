@@ -1,4 +1,7 @@
 # phASER
+
+> **Tuneup fork:** This repository includes performance improvements to phASER. See `EXECUTIVE_SUMMARY.md` for details and `BETA_TESTING.md` for setup + reproducible benchmarks.
+
 **ph**asing and **A**llele **S**pecific **E**xpression from **R**NA-seq
 
 Performs haplotype phasing using read alignments in BAM format from both DNA and RNA based assays, and provides measures of haplotypic expression for RNA based assays.

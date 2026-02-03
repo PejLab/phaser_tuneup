@@ -18,7 +18,11 @@ A bug was introduced in version 0.9.8 (12/16/16) and fixed in version 0.9.9.4 (0
 I have written a [step-by-step tutorial](https://stephanecastel.wordpress.com/2017/02/15/how-to-generate-ase-data-with-phaser/) describing how to use phASER to generate ASE data. If you aren't sure where to start give this a read.
 
 # Setup
-Before phASER can be run the read variant mapper module must be compiled. This requires [Cython](http://cython.org) and can be performed with the following command:
+phASER runs on Python 3.x.
+
+**NOTE (this fork):** The default SNP-only workflow (`--include_indels 0`, the default) uses a fast BAM-stream mapper and does **not** require compiling the legacy read-variant mapper module. Compiling can still be useful for legacy code paths (e.g. indel mapping).
+
+Optional compile step (requires [Cython](http://cython.org)):
 ```
 python3 setup.py build_ext --inplace
 mv read_variant_map.*.so read_variant_map.so
