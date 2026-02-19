@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="${ROOT}/data"
 OUT_DIR="${ROOT}/out/smoke"
+TOOLS_DIR="${ROOT}/tools/bin"
+if [[ -d "${TOOLS_DIR}" ]]; then
+  export PATH="${TOOLS_DIR}:${PATH}"
+fi
 
 VCF="${DATA_DIR}/NA06986.vcf.gz"
 BAM="${DATA_DIR}/NA06986.2.M_111215_4.bam"
@@ -15,6 +19,22 @@ if [[ ! -s "${VCF}" || ! -s "${VCF}.tbi" || ! -s "${BAM}" ]]; then
 fi
 
 mkdir -p "${OUT_DIR}"
+
+require_tools() {
+  local missing=0
+  for exe in samtools bedtools bcftools bgzip tabix; do
+    if ! command -v "${exe}" >/dev/null 2>&1; then
+      echo "Missing dependency: ${exe}"
+      missing=1
+    fi
+  done
+  if [[ "${missing}" -ne 0 ]]; then
+    echo "Install dependencies or add ROOT/tools/bin to PATH."
+    exit 1
+  fi
+}
+
+require_tools
 
 TIME_CMD="/usr/bin/time -p"
 if [[ ! -x "/usr/bin/time" ]]; then
@@ -31,6 +51,7 @@ ${TIME_CMD} python3 "${ROOT}/phaser/phaser.py" \
   --mapq 255 --baseq 10 \
   --sample NA06986 \
   --chr 1 \
+  --prefilter_hets 1 --reintegrate_vcf 1 \
   --o "${PHASER_PREFIX}" 2> "${PHASER_PREFIX}.time.txt"
 
 test -s "${PHASER_PREFIX}.haplotypic_counts.txt"

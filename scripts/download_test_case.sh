@@ -3,6 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="${ROOT}/data"
+TOOLS_DIR="${ROOT}/tools/bin"
+if [[ -d "${TOOLS_DIR}" ]]; then
+  export PATH="${TOOLS_DIR}:${PATH}"
+fi
 
 mkdir -p "${DATA_DIR}"
 
