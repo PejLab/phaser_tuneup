@@ -70,6 +70,7 @@ It compares:
 
 Note: `prefilter ON + reintegration OFF` is the fastest mode when you only need phased het-site output, because full-VCF reintegration is skipped.
 Benchmark details and speedups are summarized in `../docs/benchmarks/runtime_benchmark_report.md`.
+This tuneup benchmarking update was prepared by [PEJ Lab](https://pejlab.org).
 
 **Useful files**
 
