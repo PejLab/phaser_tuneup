@@ -145,6 +145,7 @@ All input BAMs will be used to generate haplotypes and phase variants, so they m
 * Keep `--prefilter_hets 1` for cohort-scale VCFs with many hom-ref/hom-alt records.
 * Use `--reintegrate_vcf 1` when downstream tools expect a full VCF layout (backward compatible output).
 * Use `--reintegrate_vcf 0` when downstream only needs phased het sites and you want faster VCF output.
+* For cohort analyses that still need hom-site-preserving outputs, run phASER with `--reintegrate_vcf 0` per sample and do reintegration once in a batch outside phASER to avoid repeating reintegration cost sample-by-sample.
 * If your VCF already has relatively few homozygous records, test `--prefilter_hets 0` since prefiltering may not help enough to offset its own setup cost.
 
 

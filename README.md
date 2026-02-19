@@ -19,6 +19,7 @@ Documentation Pages: [phASER](https://github.com/secastel/phaser/tree/master/pha
 Benchmark plot and raw benchmark table are available here:
 * Plot: `docs/benchmarks/runtime_comparison_bar.png`
 * Report: `docs/benchmarks/runtime_benchmark_report.md`
+* Cohort tip: if hom-site-preserving outputs are required, run with reintegration OFF per sample and batch reintegrate outside phASER.
 * Prepared by [PEJ Lab](https://pejlab.org).
 ![Runtime comparison](docs/benchmarks/runtime_comparison_bar.png)
 

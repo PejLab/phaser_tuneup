@@ -23,6 +23,7 @@ This release includes a runtime comparison plot for baseline phASER vs tuned phA
 ## Notes
 - `pref ON + reint OFF` is fastest when downstream only needs phased het-site output.
 - `pref ON + reint ON` preserves backward-compatible full-VCF output.
+- For cohorts where you must retain hom sites, run phASER with reintegration OFF and perform reintegration once as a separate batch step outside phASER to reduce total runtime.
 - If `prefilter_hets` is off, reintegration is automatically disabled.
 
 ---
