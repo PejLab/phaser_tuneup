@@ -46,6 +46,8 @@ def main():
 	parser.add_argument("--as_q_cutoff", type=float, default=0.05, help="Bottom quantile to cutoff for read alignment score.")
 	parser.add_argument("--blacklist", default="", help="BED file containing genomic intervals to be excluded from phasing (for example HLA).")
 	parser.add_argument("--write_vcf", type=int, default=1, help="Create a VCF containing phasing information (0,1).")
+	parser.add_argument("--prefilter_hets", type=int, default=1, help="Prefilter the input VCF to heterozygous sites for the selected sample before phasing (0,1).")
+	parser.add_argument("--reintegrate_vcf", type=int, default=1, help="When --prefilter_hets = 1 and --write_vcf = 1, write output against the full input VCF for backward compatibility (1) or only against the het-filtered VCF for faster output (0).")
 	parser.add_argument("--include_indels", type=int, default=0, help="Include indels in the analysis (0,1). NOTE: since mapping is a problem for indels including them will likely result in poor quality phasing unless specific precautions have been taken.")
 	parser.add_argument("--output_read_ids", type=int, default=0, help="Output read IDs in the coverage files (0,1).")
 	parser.add_argument("--remove_dups", type=int, default=1, help="Remove duplicate reads from all analyses (0,1).")
@@ -81,6 +83,13 @@ def main():
 
 	global args;
 	args = parser.parse_args()
+	global vcf_output_source_override;
+	vcf_output_source_override = "";
+
+	# Reintegration only applies when a het-prefiltered VCF is used as input.
+	if args.prefilter_hets == 0 and args.reintegrate_vcf != 0:
+		fun_flush_print("NOTE: --reintegrate_vcf is ignored when --prefilter_hets 0; disabling reintegration mode.");
+		args.reintegrate_vcf = 0;
 
 	#setup
 	version = "1.2.0";
@@ -206,16 +215,57 @@ def parse_sample(sample_name, map_sample_column, bam_file, sample_out_path, cont
 	else:
 		fatal_error("Sample '%s' not found in the input VCF file." % (sample_name));
 
+	global vcf_output_source_override;
+	vcf_output_source_override = args.vcf;
+	prefilter_vcf_path = "";
+	prefilter_vcf_index = "";
+	vcf_input_for_parse = args.vcf;
+
+	if args.prefilter_hets == 1:
+		fun_flush_print("    prefiltering VCF to heterozygous sites for sample '%s'..." % (sample_name));
+		vcf_prefilter = tempfile.NamedTemporaryFile(delete=False, suffix=".hets.vcf.gz");
+		vcf_prefilter.close();
+		prefilter_vcf_path = vcf_prefilter.name;
+		prefilter_vcf_index = prefilter_vcf_path + ".tbi";
+
+		region_arg = "";
+		if args.chr != "":
+			region_arg = " -r " + shlex.quote(args.chr);
+		call_prefilter = (
+			"bcftools view -s "
+			+ shlex.quote(sample_name)
+			+ " -g het"
+			+ region_arg
+			+ " -Oz -o "
+			+ shlex.quote(prefilter_vcf_path)
+			+ " "
+			+ shlex.quote(args.vcf)
+		);
+		subprocess.check_call("set -euo pipefail && " + call_prefilter, shell=True, executable="/bin/bash")
+		subprocess.check_call(
+			"set -euo pipefail && tabix -f -p vcf " + shlex.quote(prefilter_vcf_path),
+			shell=True,
+			executable="/bin/bash",
+		)
+		vcf_input_for_parse = prefilter_vcf_path;
+		if args.reintegrate_vcf == 0:
+			vcf_output_source_override = prefilter_vcf_path;
+
 
 	# filter blacklisted variants if necessary, cut only sample column, filter for heterozygous sites
 	# decompress for intersection
-	vcf_q = shlex.quote(args.vcf)
+	vcf_q = shlex.quote(vcf_input_for_parse)
 	if args.chr != "":
 		fun_flush_print("    restricting to chromosome '%s'..." % (args.chr));
 		decomp_str = "tabix -h " + vcf_q + " " + shlex.quote(args.chr + ":")
 	else:
 		fun_flush_print("    using all the chromosomes ...");
 		decomp_str = "gunzip -c " + vcf_q;
+
+	if args.prefilter_hets == 1:
+		cut_and_het_filter = "";
+	else:
+		cut_and_het_filter = " | cut -f 1-9," + str(sample_column + 1) + " | grep -v '0|0\\|1|1'";
 
 	## create a temporary file to store the VCF data
 	vcf_out = tempfile.NamedTemporaryFile(delete=False);
@@ -227,9 +277,8 @@ def parse_sample(sample_name, map_sample_column, bam_file, sample_out_path, cont
 		fun_flush_print("    removing blacklisted variants and processing VCF...");
 		call_str = (
 			decomp_str
-			+ " | cut -f 1-9,"
-			+ str(sample_column + 1)
-			+ " | grep -v '0|0\\|1|1' | bedtools intersect -header -v -a stdin -b "
+			+ cut_and_het_filter
+			+ " | bedtools intersect -header -v -a stdin -b "
 			+ shlex.quote(args.blacklist)
 			+ " > "
 			+ shlex.quote(vcf_out.name)
@@ -239,9 +288,8 @@ def parse_sample(sample_name, map_sample_column, bam_file, sample_out_path, cont
 		fun_flush_print("    processing VCF...");
 		call_str = (
 			decomp_str
-			+ " | cut -f 1-9,"
-			+ str(sample_column + 1)
-			+ " | grep -v '0|0\\|1|1' > "
+			+ cut_and_het_filter
+			+ " > "
 			+ shlex.quote(vcf_out.name)
 		);
 		error_code = subprocess.check_call("set -euo pipefail && "+call_str,shell=True, executable='/bin/bash')
@@ -302,7 +350,7 @@ def parse_sample(sample_name, map_sample_column, bam_file, sample_out_path, cont
 		## prepare the list of the contig/chromosome names in the input VCF
 		if args.chr == '':
 			# if original args.chr was empty, use all the chromosomes
-			argu0 = ["tabix -l " + shlex.quote(args.vcf)]
+			argu0 = ["tabix -l " + shlex.quote(vcf_input_for_parse)]
 			process_col0 = subprocess.Popen(argu0, stdout=subprocess.PIPE,
 											stderr=subprocess.PIPE, shell=True, executable='/bin/bash')
 			uniq_chr = process_col0.communicate()[0]
@@ -350,6 +398,12 @@ def parse_sample(sample_name, map_sample_column, bam_file, sample_out_path, cont
 		## After the above for-loop process is complete, merge the data for several contigs/chromosomes
 		# This is only active in "process_slow = 1" mode.
 		merge_files(chr_of_interest, org_outprefix, sample_name)
+
+	if prefilter_vcf_path != "":
+		if os.path.isfile(prefilter_vcf_path): os.remove(prefilter_vcf_path);
+		if os.path.isfile(prefilter_vcf_index): os.remove(prefilter_vcf_index);
+		prefilter_csi = prefilter_vcf_path + ".csi";
+		if os.path.isfile(prefilter_csi): os.remove(prefilter_csi);
 
 # this is only active in "process_slow = 1" mode.
 def merge_files(chr_of_interest, org_outprefix, sample_name):
@@ -1734,6 +1788,7 @@ def write_vcf(out_prefix, chromosome_of_interest):
 	global haplotype_pvalue_lookup
 	global sample_column;
 	global csi_index;
+	global vcf_output_source_override;
 	
 	fun_flush_print("#7. Outputting phased VCF...");
 
@@ -1746,15 +1801,21 @@ def write_vcf(out_prefix, chromosome_of_interest):
 
 	#if args.chr != "":
 		#decomp_str = "tabix -h "+args.vcf+" "+args.chr+":"
+	vcf_source = args.vcf;
+	if vcf_output_source_override != "":
+		vcf_source = vcf_output_source_override;
+	if args.prefilter_hets == 1 and args.reintegrate_vcf == 0:
+		fun_flush_print("     Output VCF is being written from the het-filtered input (--reintegrate_vcf 0).");
+
 	if chromosome_of_interest != "":
-		decomp_str = "tabix -h "+shlex.quote(args.vcf)+" "+ chromosome_of_interest + ":"
+		decomp_str = "tabix -h "+shlex.quote(vcf_source)+" "+ chromosome_of_interest + ":"
 	else:
-		decomp_str = "gunzip -c "+shlex.quote(args.vcf);
+		decomp_str = "gunzip -c "+shlex.quote(vcf_source);
 
 	# If the input VCF is multi-sample, filter down to the target sample before parsing
 	# to avoid splitting huge sample columns in Python.
 	try:
-		_vf = pysam.VariantFile(args.vcf);
+		_vf = pysam.VariantFile(vcf_source);
 		n_samples = len(list(_vf.header.samples));
 		_vf.close();
 	except:
